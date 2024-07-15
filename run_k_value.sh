@@ -24,7 +24,9 @@ width=100
 alpha_inv=1
 beta=1
 lm_ord=0
-help="Determine the k value for a given model
+help="Determine the k value for a given model.
+The data directory should contain either wavs + a trn file,
+or wavs + corresponding txt files
 
 Options
     -h          Display this help message and exit
@@ -103,6 +105,12 @@ if [ ! -d "$data" ]; then
     echo -e "'$data' is not a directory! set -d appropriately!"
     exit 1
 fi
+for part in "${partitions[@]}"; do
+    if [ ! -d "$data/$part" ]; then
+        echo -e "'$part' does not exist as a subdirectory of '$data'! set -d appropriately!"
+        exit 1
+    fi
+done
 if [ ! -f "$perplexity_lm" ]; then
     if [ ! $lm_ord -ge 2 ]; then
       echo -e "'$perplexity_lm' is not a file! set -P appropriately!"
@@ -176,8 +184,7 @@ set -eo pipefail
 
 boothroyd="$(dirname "$0")"
 
-if ! $pointwise; then
-    for part in "${partitions[@]}"; do
+for part in "${partitions[@]}"; do
     # Data prep -------------------------------------------------
     mkdir -p "$out_dir/$norm_wavs_out_dir/$part"
     mkdir -p "$out_dir/$noise_wavs_out_dir/$part"
@@ -188,110 +195,130 @@ if ! $pointwise; then
         touch "$out_dir/$norm_wavs_out_dir/$part/.done"
     fi
 
+    if ! [ -f "$data/$part/trn" ]; then
+        :> "$data/$part/trn"
+        for file in "$data"/"$part"/*.wav; do
+            filename="$(basename "$file" .wav)"
+            printf "%s (%s)\n" "$(< "${file%%.wav}.txt")" "$filename" >> "$data/$part/trn"
+        done
+    fi
+
     if ! [ -f "$out_dir/$noise_wavs_out_dir/$part/trn_lstm" ]; then
         cp "$data/$part/trn" "$out_dir/$noise_wavs_out_dir/$part/trn"
         split_text "$out_dir/$noise_wavs_out_dir/$part/trn"
         mv "$out_dir/$noise_wavs_out_dir/$part/trn"{,_lstm}
     fi
+done
 
-    for snr in $(seq $snr_low $snr_high); do
-        spart="$out_dir/$noise_wavs_out_dir/$part/snr${snr}"
-        if ! [[ -f "$spart/.done_noise" || -f "$spart/.done_split" ]]; then
-            bash "$boothroyd"/add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
-            -o "$out_dir/$noise_wavs_out_dir" -p "$part"
-            touch "$spart/.done_noise"
-        fi
 
-        # Decoding -------------------------------------------------
 
-        if [[ "$(basename $model)" == "mms_lsah_q" ]]; then
-        if [ "$lm_ord" = 0 ]; then
-            name="greedy"
-            if  ! [ -f "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" ]; then
-                echo "Greedily decoding '$spart'"
-                mkdir -p "$model/k_decode/$part/$name"
-                python3 ./mms.py decode \
-                    "$model" "$spart" "$model/k_decode/${part}/${name}/snr${snr}_${name}.csv_"
-                mv "$model/k_decode/${part}/${name}/snr${snr}_${name}.csv"{_,}
-                python3 ./mms.py metadata-to-trn \
-                    "$model/k_decode/${part}/${name}/snr${snr}_${name}."{csv,trn_}
-                mv "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn"{_,}
-            fi
-        else
-            if [ ! -f "prep/ngram_lm.py" ]; then
-                echo "Initializing Git submodule"
-                git submodule update --init --remote prep
-            fi
-            if  ! [ -f "$model/k_decode/logits/${part}_snr${snr}/.done" ]; then
-                echo "Dumping logits of '$spart'"
-                mkdir -p "$model/k_decode/logits/${part}_snr${snr}"
-                python3 ./mms.py decode --logits-dir "$model/k_decode/logits/${part}_snr${snr}" \
-                    "$model" "$spart" "/dev/null"
-                touch "$model/k_decode/logits/${part}_snr${snr}/.done"
+
+
+
+
+
+
+
+if ! $pointwise; then
+    for part in "${partitions[@]}"; do
+        for snr in $(seq $snr_low $snr_high); do
+            spart="$out_dir/$noise_wavs_out_dir/$part/snr${snr}"
+            if ! [[ -f "$spart/.done_noise" || -f "$spart/.done_split" ]]; then
+                bash "$boothroyd"/add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
+                -o "$out_dir/$noise_wavs_out_dir" -p "$part"
+                touch "$spart/.done_noise"
             fi
 
-            if [ "$lm_ord" = 1 ]; then
-                name="w${width}_nolm"
-                alpha_inv=1
-                beta=1
-                lm_args=( )
+            # Decoding -------------------------------------------------
+
+            if [[ "$(basename $model)" == "mms_lsah_q" ]]; then
+            if [ "$lm_ord" = 0 ]; then
+                name="greedy"
+                if  ! [ -f "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" ]; then
+                    echo "Greedily decoding '$spart'"
+                    mkdir -p "$model/k_decode/$part/$name"
+                    python3 ./mms.py decode \
+                        "$model" "$spart" "$model/k_decode/${part}/${name}/snr${snr}_${name}.csv_"
+                    mv "$model/k_decode/${part}/${name}/snr${snr}_${name}.csv"{_,}
+                    python3 ./mms.py metadata-to-trn \
+                        "$model/k_decode/${part}/${name}/snr${snr}_${name}."{csv,trn_}
+                    mv "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn"{_,}
+                fi
             else
-                name="w${width}_lm${lm_ord}_ainv${alpha_inv}_b${beta}"
-                lm="$model/lm/${lm_ord}gram.arpa"
-                lm_args=( --lm "$lm" )
-                if ! [ -f "$lm" ]; then
-                    echo "Constructing '$lm'"
-                    mkdir -p "$model/lm"
-                    python3 ./prep/ngram_lm.py -o $lm_ord -t 0 1 < "etc/lm_text.txt" > "${lm}_"
-                    mv "$lm"{_,}
+                if [ ! -f "prep/ngram_lm.py" ]; then
+                    echo "Initializing Git submodule"
+                    git submodule update --init --remote prep
+                fi
+                if  ! [ -f "$model/k_decode/logits/${part}_snr${snr}/.done" ]; then
+                    echo "Dumping logits of '$spart'"
+                    mkdir -p "$model/k_decode/logits/${part}_snr${snr}"
+                    python3 ./mms.py decode --logits-dir "$model/k_decode/logits/${part}_snr${snr}" \
+                        "$model" "$spart" "/dev/null"
+                    touch "$model/k_decode/logits/${part}_snr${snr}/.done"
+                fi
+
+                if [ "$lm_ord" = 1 ]; then
+                    name="w${width}_nolm"
+                    alpha_inv=1
+                    beta=1
+                    lm_args=( )
+                else
+                    name="w${width}_lm${lm_ord}_ainv${alpha_inv}_b${beta}"
+                    lm="$model/lm/${lm_ord}gram.arpa"
+                    lm_args=( --lm "$lm" )
+                    if ! [ -f "$lm" ]; then
+                        echo "Constructing '$lm'"
+                        mkdir -p "$model/lm"
+                        python3 ./prep/ngram_lm.py -o $lm_ord -t 0 1 < "etc/lm_text.txt" > "${lm}_"
+                        mv "$lm"{_,}
+                    fi
+                fi
+
+                if ! [ -f "$model/token2id" ]; then
+                    echo "Constructing '$model/token2id'"
+                    python3 ./mms.py vocab-to-token2id "$model/"{vocab.json,token2id}
+                fi
+
+                if ! [ -f "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" ]; then
+                    echo "Decoding $spart"
+                    mkdir -p "$model/k_decode/${part}/${name}"
+                    python3 ./prep/logits-to-trn-via-pyctcdecode.py \
+                        --char "${lm_args[@]}" \
+                        --words "etc/lm_words.txt" \
+                        --width $width \
+                        --beta $beta \
+                        --alpha-inv $alpha_inv \
+                        --token2id "$model/token2id" \
+                        "$model/k_decode/logits/${part}_snr${snr}" "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn"
                 fi
             fi
-
-            if ! [ -f "$model/token2id" ]; then
-                echo "Constructing '$model/token2id'"
-                python3 ./mms.py vocab-to-token2id "$model/"{vocab.json,token2id}
+            
+            if $delete_wavs; then
+                rm -rf "$spart"
+                mkdir -p "$spart"
             fi
 
-            if ! [ -f "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" ]; then
-                echo "Decoding $spart"
-                mkdir -p "$model/k_decode/${part}/${name}"
-                python3 ./prep/logits-to-trn-via-pyctcdecode.py \
-                    --char "${lm_args[@]}" \
-                    --words "etc/lm_words.txt" \
-                    --width $width \
-                    --beta $beta \
-                    --alpha-inv $alpha_inv \
-                    --token2id "$model/token2id" \
-                    "$model/k_decode/logits/${part}_snr${snr}" "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn"
             fi
-        fi
-        
-        if $delete_wavs; then
-            rm -rf "$spart"
-            mkdir -p "$spart"
-        fi
 
-        fi
+            # k calculation -------------------------------------------------
+            # make sure to set lm above when decoding at some point for -l >= 2
+            if [ ! -f "$perplexity_lm" ]; then
+                perplexity_lm=$lm
+            fi
 
-        # k calculation -------------------------------------------------
-        # make sure to set lm above when decoding at some point for -l >= 2
-        if [ ! -f "$perplexity_lm" ]; then
-            perplexity_lm=$lm
-        fi
+            perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
 
-        perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
+            if [ ! -f "$perplexity_filename" ]; then
+            python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_lstm"
+            fi
 
-        if [ ! -f "$perplexity_filename" ]; then
-          python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_lstm"
-        fi
-
-        if [ ! -f "$spart/.done_split" ]; then
-            bash "$boothroyd"/section_data.sh \
-            "$perplexity_filename" \
-            "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" 3 "$spart"
-            echo -e "split using: $perplexity_filename" > "$spart/.done_split"
-        fi
-    done
+            if [ ! -f "$spart/.done_split" ]; then
+                bash "$boothroyd"/section_data.sh \
+                "$perplexity_filename" \
+                "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" 3 "$spart"
+                echo -e "split using: $perplexity_filename" > "$spart/.done_split"
+            fi
+        done
 
     python3 "$boothroyd"/get_snr_k.py "$out_dir/$noise_wavs_out_dir/$part"
     done
