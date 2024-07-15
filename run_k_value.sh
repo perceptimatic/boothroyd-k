@@ -1,7 +1,3 @@
-# specify what folders to work with
-
-# copy lstm trn file to folder
-
 #! /usr/bin/env bash
 
 # Copyright 2024 Sean Robertson, Michael Ong
