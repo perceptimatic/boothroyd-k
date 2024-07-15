@@ -1,4 +1,6 @@
-torch
-datasets
-transformers
-tqdm
+kenlm
+numpy
+jiwer
+scipy
+matplotlib
+pydrobert.torch.data
