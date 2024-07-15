@@ -18,6 +18,7 @@ partitions=(k_test)          # partitions to perform
 out_dir=data/boothroyd
 norm_wavs_out_dir=norm
 noise_wavs_out_dir=noise
+hyps_out_dir=hyps
 snr_low=-10
 snr_high=30
 width=100
@@ -40,6 +41,7 @@ Options
     -n DIR      The output subdirectory for the normalized wav files (default: '$out_dir/$norm_wavs_out_dir')
     -N DIR      The output subdirectory for the normalized wav files
                 with added noise (default: '$out_dir/$noise_wavs_out_dir')
+    -O DIR      The output subdirectory for the hypothesis trn files (default: '$out_dir/$hyps_out_dir')
     -L INT      The lower bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_low')
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
     -w NAT      pyctcdecode's beam width (default: $width)
@@ -47,7 +49,7 @@ Options
     -B NAT      pyctcdecode's beta (default: $beta)
     -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
 
-while getopts "hpDs:m:d:P:o:n:N:L:H:w:a:B:l:" name; do
+while getopts "hpDs:m:d:P:o:n:N:O:L:H:w:a:B:l:" name; do
     case $name in
         h)
             echo "$usage"
@@ -72,6 +74,8 @@ while getopts "hpDs:m:d:P:o:n:N:L:H:w:a:B:l:" name; do
             norm_wavs_out_dir="$OPTARG";;
         N)
             noise_wavs_out_dir="$OPTARG";;
+        O)
+            hyps_out_dir="$OPTARG";;
         L)
             snr_low="$OPTARG";;
         H)
@@ -129,6 +133,10 @@ if ! mkdir -p "$out_dir/$norm_wavs_out_dir" 2> /dev/null; then
 fi
 if ! mkdir -p "$out_dir/$noise_wavs_out_dir" 2> /dev/null; then
     echo -e "Could not create '$out_dir/$noise_wavs_out_dir'! set -N appropriately!"
+    exit 1
+fi
+if ! mkdir -p "$out_dir/$hyps_out_dir" 2> /dev/null; then
+    echo -e "Could not create '$out_dir/$hyps_out_dir'! set -O appropriately!"
     exit 1
 fi
 if ! [[ "$snr_low" =~ ^-?[0-9]+\.?[0-9]*$ ]] 2> /dev/null; then
@@ -221,21 +229,13 @@ if ! $pointwise; then
 
             # Decoding -------------------------------------------------
 
-            if [[ "$(basename $model)" == "mms_lsah" ]]; then
-                bash "$boothroyd"/decode_mms.sh \
-                -d "$spart" \
-                -p "$part" \
-                -S "$snr" \
-                -w "$width" \
-                -a "$alpha_inv" \
-                -B "$beta" \
-                -l "$lm_ord"
-            else
-                #########################
-                :
-                # provide decoding script for other models
-                ####################
-            fi
+            #########################
+            ### decoding script goes here
+            ### output of this script should be 
+            ### the trn file with the hyp decodings for this spart (snr + partition)
+            ### put in a subfolder of $hyps_out_dir
+            ### this is then passed as the second argument to section_data.sh
+            #########################
             
             if $delete_wavs; then
                 rm -rf "$spart"
@@ -257,7 +257,7 @@ if ! $pointwise; then
             if [ ! -f "$spart/.done_split" ]; then
                 bash "$boothroyd"/section_data.sh \
                 "$perplexity_filename" \
-                "$model/k_decode/${part}/${name}/snr${snr}_${name}.trn" 3 "$spart"
+                "$hyps/${part}/${name}/snr${snr}_${name}.trn" 3 "$spart"
                 echo -e "split using: $perplexity_filename" > "$spart/.done_split"
             fi
         done
