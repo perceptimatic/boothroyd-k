@@ -1,5 +1,6 @@
 mkdir -p "data/boothroyd/test_trns"
 spart_trn="data/boothroyd/test_trns/snr$snr.trn"
+lm="5gram.arpa"
 
 awk -v snr="$snr" \
 '
@@ -8,15 +9,21 @@ BEGIN {
 }
 
 function prob(n) {
-    return int((4 ** ((-n / 10))) * rand())
+    return int((2 ** ((-n / 16) + 2.9)) * rand())
 }
 
 {
     filename = $NF;
     NF--;
     for (i = 1; i <= NF; i++) {
-        if (prob(snr) > 1) {
+        if (prob(snr) > 3) {
             $i = "q";
+        }
+        else if (prob(snr) > 2) {
+            $i = "q ";
+        }
+        else if (prob(snr) > 1) {
+            $i = "";
         }
     }
     print $0, filename
