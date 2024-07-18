@@ -6,11 +6,12 @@
 export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
-usage="Usage: $0 [-h] [-p] [-D] [-s INT] [-m DIR] [-d DIR] [-P FILE] [-o DIR] [-n DIR] [-N DIR] [-L INT] [-H INT] 
-[-w NAT] [-a NAT] [-B NAT] [-l NAT]"
+usage="Usage: $0 [-h] [-p] [-D] [-s INT] [-S STR] [-m DIR] [-d DIR]
+[-P FILE] [-o DIR] [-n DIR] [-N DIR] [-L INT] [-H INT] [-l NAT]"
 pointwise=false
 delete_wavs=false
 point_snr=
+decode_script_w_opts=
 model=exp/mms_lsah
 data=
 perplexity_lm=
@@ -18,12 +19,8 @@ partitions=(k_test)          # partitions to perform
 out_dir=data/boothroyd
 norm_wavs_out_dir=norm
 noise_wavs_out_dir=noise
-hyps_out_dir=hyps
 snr_low=-10
 snr_high=30
-width=100
-alpha_inv=1
-beta=1
 lm_ord=0
 help="Determine the k value for a given model.
 The data directory should contain either wavs + a trn file,
@@ -34,6 +31,7 @@ Options
     -p          Determine the k-value for a specific SNR
     -D          Deletes the wav files in the noise dir after decoding (default: '$delete_wavs')
     -s INT      The SNR (in dB) used if -p is set to true (default: '$point_snr')
+    -S STR      The decoding script with (optional) passed options (default: '$decode_script_w_opts')
     -m DIR      The model directory (default: '$model')
     -d DIR      The data directory (default: '$data_dir')
     -P FILE     The language model used to calculate the perplexity (default: '$perplexity_lm')
@@ -41,15 +39,11 @@ Options
     -n DIR      The output subdirectory for the normalized wav files (default: '$out_dir/$norm_wavs_out_dir')
     -N DIR      The output subdirectory for the normalized wav files
                 with added noise (default: '$out_dir/$noise_wavs_out_dir')
-    -O DIR      The output subdirectory for the hypothesis trn files (default: '$out_dir/$hyps_out_dir')
     -L INT      The lower bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_low')
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
-    -w NAT      pyctcdecode's beam width (default: $width)
-    -a NAT      pyctcdecode's alpha, inverted (default: $alpha_inv)
-    -B NAT      pyctcdecode's beta (default: $beta)
     -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
 
-while getopts "hpDs:m:d:P:o:n:N:O:L:H:w:a:B:l:" name; do
+while getopts "hpDs:S:m:d:P:o:n:N:L:H:l:" name; do
     case $name in
         h)
             echo "$usage"
@@ -62,6 +56,8 @@ while getopts "hpDs:m:d:P:o:n:N:O:L:H:w:a:B:l:" name; do
             delete_wavs=true;;
         s)
             point_snr="$OPTARG";;
+        S)
+            decode_script_w_opts="$OPTARG";;
         m)
             model="$OPTARG";;
         d)
@@ -74,18 +70,10 @@ while getopts "hpDs:m:d:P:o:n:N:O:L:H:w:a:B:l:" name; do
             norm_wavs_out_dir="$OPTARG";;
         N)
             noise_wavs_out_dir="$OPTARG";;
-        O)
-            hyps_out_dir="$OPTARG";;
         L)
             snr_low="$OPTARG";;
         H)
             snr_high="$OPTARG";;
-        w)
-            width="$OPTARG";;
-        a)
-            alpha_inv="$OPTARG";;
-        B)
-            beta="$OPTARG";;
         l)
             lm_ord="$OPTARG";;
         *)
@@ -99,6 +87,10 @@ if $pointwise; then
       echo -e "$point_snr is not a real number! set -s appropriately, or add a leading zero!"
       exit 1
   fi
+fi
+if [ ! -z "$decode_script_w_opts" ]; then
+    echo -e "'$decode_script_w_opts' has not been assigned! set -S appropriately!"
+    exit 1
 fi
 if [ ! -d "$model" ]; then
     echo -e "'$model' is not a directory! set -m appropriately!"
@@ -135,10 +127,6 @@ if ! mkdir -p "$out_dir/$noise_wavs_out_dir" 2> /dev/null; then
     echo -e "Could not create '$out_dir/$noise_wavs_out_dir'! set -N appropriately!"
     exit 1
 fi
-if ! mkdir -p "$out_dir/$hyps_out_dir" 2> /dev/null; then
-    echo -e "Could not create '$out_dir/$hyps_out_dir'! set -O appropriately!"
-    exit 1
-fi
 if ! [[ "$snr_low" =~ ^-?[0-9]+\.?[0-9]*$ ]] 2> /dev/null; then
     echo -e "$snr_low is not a real number! set -L appropriately, or add a leading zero!"
     exit 1
@@ -149,18 +137,6 @@ if ! [[ "$snr_high" =~ ^-?[0-9]+\.?[0-9]*$ ]] 2> /dev/null; then
 fi
 if ! [[ "$(bc -l <<< "$snr_low <= $snr_high")" -ne 0 ]]; then
     echo -e "$snr_low is greater than $snr_high! set -L and -H appropriately!"
-    exit 1
-fi
-if ! [ "$width" -gt 0 ] 2> /dev/null; then
-    echo -e "$width is not a natural number! set -w appropriately!"
-    exit 1
-fi
-if ! [ "$alpha_inv" -gt 0 ] 2> /dev/null; then
-    echo -e "$alpha_inv is not a natural number! set -a appropriately!"
-    exit 1
-fi
-if (( "$(bc -l <<< "$beta < 0")" )); then
-    echo -e "$beta is not greater than 0! set -B appropriately!"
     exit 1
 fi
 if ! [ "$lm_ord" -ge 0 ] 2> /dev/null; then
@@ -231,10 +207,15 @@ if ! $pointwise; then
 
             #########################
             ### decoding script goes here
-            ### output of this script should be 
-            ### the trn file with the hyp decodings for this spart (snr + partition)
-            ### put in a subfolder of $hyps_out_dir
-            ### this is then passed as the second argument to section_data.sh
+            ### must be a bash script
+            ### options in decoding script must follow the same format as here
+            ### decoding script must set a variable called spart_trn 
+            ### containing the hyp decodings for this spart (snr level + partition)
+            ### which is passed as the second argument to section_data.sh
+            ### variable for langauge model should be called lm
+
+            . "$decode_script_w_opts" "-l $lm_ord"
+
             #########################
             
             if $delete_wavs; then
@@ -257,7 +238,7 @@ if ! $pointwise; then
             if [ ! -f "$spart/.done_split" ]; then
                 bash "$boothroyd"/section_data.sh \
                 "$perplexity_filename" \
-                "$hyps/${part}/${name}/snr${snr}_${name}.trn" 3 "$spart"
+                "$spart_trn" 3 "$spart"
                 echo -e "split using: $perplexity_filename" > "$spart/.done_split"
             fi
         done
