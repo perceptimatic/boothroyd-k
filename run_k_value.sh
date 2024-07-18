@@ -6,13 +6,12 @@
 export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
-usage="Usage: $0 [-h] [-p] [-D] [-s INT] [-S STR] [-m DIR] [-d DIR]
-[-P FILE] [-o DIR] [-n DIR] [-N DIR] [-L INT] [-H INT] [-l NAT]"
+usage="Usage: $0 [-h] [-p] [-D] [-s INT] [-S STR] [-d DIR] [-P FILE]
+[-o DIR] [-n DIR] [-N DIR] [-L INT] [-H INT] [-l NAT]"
 pointwise=false
 delete_wavs=false
 point_snr=
 decode_script_w_opts=
-model=exp/mms_lsah
 data=
 perplexity_lm=
 partitions=(k_test)          # partitions to perform
@@ -32,7 +31,6 @@ Options
     -D          Deletes the wav files in the noise dir after decoding (default: '$delete_wavs')
     -s INT      The SNR (in dB) used if -p is set to true (default: '$point_snr')
     -S STR      The decoding script with (optional) passed options (default: '$decode_script_w_opts')
-    -m DIR      The model directory (default: '$model')
     -d DIR      The data directory (default: '$data_dir')
     -P FILE     The language model used to calculate the perplexity (default: '$perplexity_lm')
     -o DIR      The output directory (default: '$out_dir')
@@ -43,7 +41,7 @@ Options
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
     -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
 
-while getopts "hpDs:S:m:d:P:o:n:N:L:H:l:" name; do
+while getopts "hpDs:S:d:P:o:n:N:L:H:l:" name; do
     case $name in
         h)
             echo "$usage"
@@ -58,8 +56,6 @@ while getopts "hpDs:S:m:d:P:o:n:N:L:H:l:" name; do
             point_snr="$OPTARG";;
         S)
             decode_script_w_opts="$OPTARG";;
-        m)
-            model="$OPTARG";;
         d)
             data="$OPTARG";;
         P)
@@ -88,12 +84,8 @@ if $pointwise; then
       exit 1
   fi
 fi
-if [ ! -z "$decode_script_w_opts" ]; then
+if [ -z "$decode_script_w_opts" ]; then
     echo -e "'$decode_script_w_opts' has not been assigned! set -S appropriately!"
-    exit 1
-fi
-if [ ! -d "$model" ]; then
-    echo -e "'$model' is not a directory! set -m appropriately!"
     exit 1
 fi
 if [ ! -d "$data" ]; then
