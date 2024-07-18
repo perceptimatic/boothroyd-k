@@ -1,6 +1,6 @@
-kenlm
 numpy
 jiwer
 scipy
 matplotlib
-pydrobert.torch.data
+kenlm
+git+https://github.com/sdrobert/pydrobert-pytorch.git
