@@ -204,7 +204,8 @@ if ! $pointwise; then
             ### decoding script must set a variable called spart_trn 
             ### containing the hyp decodings for this spart (snr level + partition)
             ### which is passed as the second argument to section_data.sh
-            ### variable for langauge model should be called lm
+            ### if you do not provide a language model for the perplexity calculation
+            ### you should set lm to be the path to a language model in the decoding script
 
             . "$decode_script_w_opts" "-l $lm_ord"
 
