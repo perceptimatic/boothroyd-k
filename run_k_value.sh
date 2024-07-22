@@ -175,120 +175,60 @@ for part in "${partitions[@]}"; do
         split_text "$out_dir/$noise_wavs_out_dir/$part/trn"
         mv "$out_dir/$noise_wavs_out_dir/$part/trn"{,_lstm}
     fi
-done
 
-if ! $pointwise; then
-    for part in "${partitions[@]}"; do
-        for snr in $(seq $snr_low $snr_high); do
-            spart="$out_dir/$noise_wavs_out_dir/$part/snr${snr}"
-            if ! [[ -f "$spart/.done_noise" || -f "$spart/.done_split" ]]; then
-                bash "$boothroyd"/add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
-                -o "$out_dir/$noise_wavs_out_dir" -p "$part"
-                touch "$spart/.done_noise"
-            fi
+    for snr in $(seq $snr_low $snr_high); do
+        spart="$out_dir/$noise_wavs_out_dir/$part/snr${snr}"
+        if ! [[ -f "$spart/.done_noise" || -f "$spart/.done_split" ]]; then
+            bash "$boothroyd"/add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
+            -o "$out_dir/$noise_wavs_out_dir" -p "$part"
+            touch "$spart/.done_noise"
+        fi
 
-            # Decoding -------------------------------------------------
+        # Decoding -------------------------------------------------
 
-            #########################
-            ### decoding script goes here
-            ### must be a bash script
-            ### options in decoding script must follow the same format as here
-            ### decoding script must set a variable called spart_trn 
-            ### containing the hyp decodings for this spart (snr level + partition)
-            ### which is passed as the second argument to section_data.sh
-            ### if you do not provide a language model for the perplexity calculation
-            ### you should set lm to be the path to a language model in the decoding script
+        #########################
+        ### decoding script goes here
+        ### must be a bash script
+        ### options in decoding script must follow the same format as here
+        ### decoding script must set a variable called spart_trn 
+        ### containing the hyp decodings for this spart (snr level + partition)
+        ### which is passed as the second argument to section_data.sh
+        ### if you do not provide a language model for the perplexity calculation
+        ### you should set lm to be the path to a language model in the decoding script
 
-            . "$decode_script_w_opts"
-            #########################
-            
-            if $delete_wavs; then
-                rm -rf "$spart"
-                mkdir -p "$spart"
-            fi
+        . "$decode_script_w_opts"
+        #########################
+        
+        if $delete_wavs; then
+            rm -rf "$spart"
+            mkdir -p "$spart"
+        fi
 
-            # k calculation -------------------------------------------------
-            # make sure to set lm above when decoding at some point for -l >= 2
-            if [ ! -f "$perplexity_lm" ]; then
+        # k calculation -------------------------------------------------
+        # make sure to set lm above when decoding at some point for -l >= 2
+        if [ ! -f "$perplexity_lm" ]; then
 
-                #### what to do if train doesnt exist or want to use a differently named set as train
+            #### what to do if train doesnt exist or want to use a differently named set as train
 
-                echo "Training a $lm_ord-gram language model on the train set..."
-                python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_lstm")" > "${lm_ord}gram.arpa_"
-                mv "${lm_ord}gram.arpa"{_,}
-                perplexity_lm="${lm_ord}gram.arpa"
-            fi
+            echo "Training a $lm_ord-gram language model on the train set..."
+            python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_lstm")" > "${lm_ord}gram.arpa_"
+            mv "${lm_ord}gram.arpa"{_,}
+            perplexity_lm="${lm_ord}gram.arpa"
+        fi
 
-            perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
+        perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
 
-            if [ ! -f "$perplexity_filename" ]; then
-            python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_lstm"
-            fi
+        if [ ! -f "$perplexity_filename" ]; then
+        python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_lstm"
+        fi
 
-            if [ ! -f "$spart/.done_split" ]; then
-                bash "$boothroyd"/section_data.sh \
-                "$perplexity_filename" \
-                "$spart_trn" 3 "$spart"
-                echo -e "split using: $perplexity_filename" > "$spart/.done_split"
-            fi
-        done
-
-    python3 "$boothroyd"/get_snr_k.py "$out_dir/$noise_wavs_out_dir/$part"
+        if [ ! -f "$spart/.done_split" ]; then
+            bash "$boothroyd"/section_data.sh \
+            "$perplexity_filename" \
+            "$spart_trn" 3 "$spart"
+            echo -e "split using: $perplexity_filename" > "$spart/.done_split"
+        fi
     done
 
-else
-  # add pointiwse
-  :
-fi
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# data=data/boothroyd
-# model="$1"
-# exp_name="$2"
-
-# for x in test train dev; do
-#     mkdir -p "$data"/"$x"_"$model"
-
-#     cp data/lstm/"$x"/trn_lstm "$data"/"$x"_"$model"/trn_lstm
-
-#     python3 faetar_dev_kit/boothroyd/get_perplexity.py \
-#     exp/mms_lsah_q/lm/5gram.arpa "$data"/"$x"_"$model"/trn_lstm 
-
-#     faetar_dev_kit/boothroyd/section_data.sh \
-#     "$data"/"$x"_"$model"/perplexity_5gram.arpa exp/"$exp_name"/decode/"$x"_w100_unlablm5_ainv1_b1.trn 3
-    
-#     echo "hp/zp $x"
-#     python3 faetar_dev_kit/boothroyd/get_single_k.py \
-#     "$data"/"$x"_"$model"/1_ref_perplexity_5gram.arpa "$data"/"$x"_"$model"/1_hyp_perplexity_5gram.arpa \
-#     "$data"/"$x"_"$model"/3_ref_perplexity_5gram.arpa "$data"/"$x"_"$model"/3_hyp_perplexity_5gram.arpa
-
-#     echo "lp/zp $x"
-#     python3 faetar_dev_kit/boothroyd/get_single_k.py \
-#     "$data"/"$x"_"$model"/2_ref_perplexity_5gram.arpa "$data"/"$x"_"$model"/2_hyp_perplexity_5gram.arpa \
-#     "$data"/"$x"_"$model"/3_ref_perplexity_5gram.arpa "$data"/"$x"_"$model"/3_hyp_perplexity_5gram.arpa
-
-# done
-
+    python3 "$boothroyd"/get_snr_k.py "$out_dir/$noise_wavs_out_dir/$part"
+done
