@@ -6,15 +6,13 @@
 export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
-usage="Usage: $0 [-h] [-p] [-D] [-s INT] [-S STR] [-d DIR] [-P FILE]
+usage="Usage: $0 [-h] [-D] [-S STR] [-d DIR] [-P FILE]
 [-o DIR] [-n DIR] [-N DIR] [-L INT] [-H INT] [-l NAT]"
-pointwise=false
 delete_wavs=false
-point_snr=
 decode_script_w_opts=
 data=
 perplexity_lm=
-partitions=(k_test)          # partitions to perform
+partitions=(train)          # partitions to perform
 out_dir=data/boothroyd
 norm_wavs_out_dir=norm
 noise_wavs_out_dir=noise
@@ -27,9 +25,7 @@ or wavs + corresponding txt files
 
 Options
     -h          Display this help message and exit
-    -p          Determine the k-value for a specific SNR
     -D          Deletes the wav files in the noise dir after decoding (default: '$delete_wavs')
-    -s INT      The SNR (in dB) used if -p is set to true (default: '$point_snr')
     -S STR      The decoding script with (optional) passed options (default: '$decode_script_w_opts')
     -d DIR      The data directory (default: '$data_dir')
     -P FILE     The language model used to calculate the perplexity (default: '$perplexity_lm')
@@ -41,19 +37,15 @@ Options
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
     -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
 
-while getopts "hpDs:S:d:P:o:n:N:L:H:l:" name; do
+while getopts "hDS:d:P:o:n:N:L:H:l:" name; do
     case $name in
         h)
             echo "$usage"
             echo ""
             echo "$help"
             exit 0;;
-        p)
-            pointwise=true;;
         D)
             delete_wavs=true;;
-        s)
-            point_snr="$OPTARG";;
         S)
             decode_script_w_opts="$OPTARG";;
         d)
@@ -101,11 +93,11 @@ done
 if [ ! -f "$perplexity_lm" ]; then
     if [ ! $lm_ord -ge 2 ]; then
       echo -e "'$perplexity_lm' is not a file! set -P appropriately!"
-      echo -e "If you want to use the language model used for decoding, set -l to be greater than 1"
+      echo -e "If you want to train an n-gram language model and use it for the perplexity calculation, set -l to be greater than 1."
       exit 1
     fi
     echo -e "'$perplexity_lm' is not a file, but -l is greater than 1,"
-    echo -e "so the perplexity calculation will use the language model used in decoding."
+    echo -e "so the perplexity calculation will train an n-gram language model and use it."
 fi
 if ! mkdir -p "$out_dir" 2> /dev/null; then
     echo -e "Could not create '$out_dir'! set -o appropriately!"
@@ -207,8 +199,7 @@ if ! $pointwise; then
             ### if you do not provide a language model for the perplexity calculation
             ### you should set lm to be the path to a language model in the decoding script
 
-            . "$decode_script_w_opts" "-l $lm_ord"
-
+            . "$decode_script_w_opts"
             #########################
             
             if $delete_wavs; then
@@ -219,7 +210,13 @@ if ! $pointwise; then
             # k calculation -------------------------------------------------
             # make sure to set lm above when decoding at some point for -l >= 2
             if [ ! -f "$perplexity_lm" ]; then
-                perplexity_lm=$lm
+
+                #### what to do if train doesnt exist or want to use a differently named set as train
+
+                echo "Training a $lm_ord-gram language model on the train set..."
+                python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_lstm")" > "${lm_ord}gram.arpa_"
+                mv "${lm_ord}gram.arpa"{_,}
+                perplexity_lm="${lm_ord}gram.arpa"
             fi
 
             perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"

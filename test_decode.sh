@@ -1,6 +1,5 @@
 mkdir -p "data/boothroyd/test_trns"
 spart_trn="data/boothroyd/test_trns/snr$snr.trn"
-lm="5gram.arpa"
 
 awk -v snr="$snr" \
 '
@@ -16,11 +15,14 @@ function prob(n) {
     filename = $NF;
     NF--;
     for (i = 1; i <= NF; i++) {
-        if (prob(snr) > 3) {
+        if (prob(snr) > 5) {
             $i = "q";
         }
+        else if (prob(snr) > 3) {
+            $i = "a ";
+        }
         else if (prob(snr) > 2) {
-            $i = "q ";
+            $i = $i " ";
         }
         else if (prob(snr) > 1) {
             $i = "";
@@ -29,7 +31,7 @@ function prob(n) {
     print $0, filename
 }
 ' \
-"data/boothroyd/noise/k_test/trn_lstm" |
+"data/boothroyd/noise/train/trn_lstm" |
 awk \
 '{
     filename = $NF;
