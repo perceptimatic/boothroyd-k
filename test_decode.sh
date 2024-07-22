@@ -1,3 +1,31 @@
+OPTIND=1
+
+usage="Usage: $0 [-a INT]"
+alpha=0
+help="Determine the k value for a given model.
+The data directory should contain either wavs + a trn file,
+or wavs + corresponding txt files
+
+Options
+    -h          Display this help message and exit
+    -a          alpha"
+
+while getopts "ha:" name; do
+    case $name in
+        h)
+            echo "$usage"
+            echo ""
+            echo "$help"
+            exit 0;;
+        a)
+            alpha="$OPTARG";;
+        *)
+            echo -e "$usage"
+            exit 1;;
+    esac
+done
+shift "$(($OPTIND - 1))"
+
 awk -v snr="$snr" \
 '
 BEGIN {

@@ -6,10 +6,11 @@
 export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
-usage="Usage: $0 [-h] [-D] [-S STR] [-d DIR] [-P FILE]
-[-o DIR] [-n DIR] [-N DIR] [-L INT] [-H INT] [-l NAT]"
+usage="Usage: $0 [-h] [-D] [-S STR] [-O STR] [-d DIR] [-P FILE]
+[-o DIR] [-n DIR] [-N DIR] [-t DIR] [-L INT] [-H INT] [-l NAT]"
 delete_wavs=false
-decode_script_w_opts=
+decode_script=
+decode_script_opts=
 data=
 perplexity_lm=
 partitions=(train)          # partitions to perform
@@ -27,7 +28,8 @@ or wavs + corresponding txt files
 Options
     -h          Display this help message and exit
     -D          Deletes the wav files in the noise dir after decoding (default: '$delete_wavs')
-    -S STR      The decoding script with (optional) passed options (default: '$decode_script_w_opts')
+    -S STR      The decoding script (default: '$decode_script')
+    -O STR      Options for the decoding script (default: '$decode_script_opts')
     -d DIR      The data directory (default: '$data_dir')
     -P FILE     The language model used to calculate the perplexity (default: '$perplexity_lm')
     -o DIR      The output directory (default: '$out_dir')
@@ -39,7 +41,7 @@ Options
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
     -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
 
-while getopts "hDS:d:P:o:n:N:t:L:H:l:" name; do
+while getopts "hDS:O:d:P:o:n:N:t:L:H:l:" name; do
     case $name in
         h)
             echo "$usage"
@@ -49,7 +51,9 @@ while getopts "hDS:d:P:o:n:N:t:L:H:l:" name; do
         D)
             delete_wavs=true;;
         S)
-            decode_script_w_opts="$OPTARG";;
+            decode_script="$OPTARG";;
+        O)
+            decode_script_opts="$OPTARG";;
         d)
             data="$OPTARG";;
         P)
@@ -73,9 +77,9 @@ while getopts "hDS:d:P:o:n:N:t:L:H:l:" name; do
             exit 1;;
     esac
 done
-shift $(($OPTIND - 1))
-if [ -z "$decode_script_w_opts" ]; then
-    echo -e "'$decode_script_w_opts' has not been assigned! set -S appropriately!"
+shift "$(($OPTIND - 1))"
+if [ -z "$decode_script" ]; then
+    echo -e "'$decode_script' has not been assigned! set -S appropriately!"
     exit 1
 fi
 if [ ! -d "$data" ]; then
@@ -157,7 +161,7 @@ for part in "${partitions[@]}"; do
     # Data prep -------------------------------------------------
     mkdir -p "$out_dir/$norm_wavs_out_dir/$part"
     mkdir -p "$out_dir/$noise_wavs_out_dir/$part"
-    mkdir -p "$out_dir/$trns_wavs_out_dir/$part"
+    mkdir -p "$out_dir/$trns_out_dir/$part"
 
     if ! [ -f "$out_dir/$norm_wavs_out_dir/$part/.done" ]; then
         # Normalize data volume to same reference average RMS
@@ -189,23 +193,18 @@ for part in "${partitions[@]}"; do
 
         # Decoding -------------------------------------------------
 
-        #########################
-        ### decoding script goes here
-        ### must be a bash script
-        ### options in decoding script must follow the same format as here
-        ### decoding script must set a variable called spart_trn 
-        ### containing the hyp decodings for this spart (snr level + partition)
-        ### which is passed as the second argument to section_data.sh
-
-        spart_trn="$out_dir/$trns_wavs_out_dir/$part/snr$snr.trn"
-        . "$decode_script_w_opts" > "$spart_trn"
-        #########################
+        spart_trn="$out_dir/$trns_out_dir/$part/snr$snr.trn"
+        if [ ! -f "$spart_trn" ]; then
+            echo "$decode_script_opts"
+            echo "$spart"
+            . "$decode_script" $decode_script_opts "$spart" > "$spart_trn"
+        fi
         
         if $delete_wavs; then
             rm -rf "$spart"
             mkdir -p "$spart"
         fi
-
+        
         # k calculation -------------------------------------------------
         if [ ! -f "$perplexity_lm" ]; then
             echo "Training a $lm_ord-gram language model on the train set..."
