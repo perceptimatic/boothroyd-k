@@ -2,13 +2,11 @@ OPTIND=1
 
 usage="Usage: $0 [-a INT]"
 alpha=0
-help="Determine the k value for a given model.
-The data directory should contain either wavs + a trn file,
-or wavs + corresponding txt files
+help="Test options
 
 Options
     -h          Display this help message and exit
-    -a          alpha"
+    -a          test option"
 
 while getopts "ha:" name; do
     case $name in

@@ -6,14 +6,14 @@
 export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
-usage="Usage: $0 [-h] [-D] [-S STR] [-O STR] [-d DIR] [-P FILE]
+usage="Usage: $0 [-h] [-D] [-S STR] [-O STR] [-d DIR] [-p DIR] [-P FILE]
 [-o DIR] [-n DIR] [-N DIR] [-t DIR] [-L INT] [-H INT] [-l NAT]"
 delete_wavs=false
 decode_script=
 decode_script_opts=
 data=
+partitions=()
 perplexity_lm=
-partitions=(train)          # partitions to perform
 out_dir=data/boothroyd
 norm_wavs_out_dir=norm
 noise_wavs_out_dir=noise
@@ -31,6 +31,7 @@ Options
     -S STR      The decoding script (default: '$decode_script')
     -O STR      Options for the decoding script (default: '$decode_script_opts')
     -d DIR      The data directory (default: '$data_dir')
+    -p DIR      The partition(s) of the data directory that the k value will be calculated for (default: '$partitions')
     -P FILE     The language model used to calculate the perplexity (default: '$perplexity_lm')
     -o DIR      The output directory (default: '$out_dir')
     -n DIR      The output subdirectory for the normalized wav files (default: '$out_dir/$norm_wavs_out_dir')
@@ -39,9 +40,9 @@ Options
     -t DIR      The output subdirectory for the decoded hypothesis trn files (default: '$out_dir/$trns_out_dir')
     -L INT      The lower bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_low')
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
-    -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
+    -l NAT      n-gram LM order (default: $lm_ord)"
 
-while getopts "hDS:O:d:P:o:n:N:t:L:H:l:" name; do
+while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:" name; do
     case $name in
         h)
             echo "$usage"
@@ -56,6 +57,8 @@ while getopts "hDS:O:d:P:o:n:N:t:L:H:l:" name; do
             decode_script_opts="$OPTARG";;
         d)
             data="$OPTARG";;
+        p)
+            partitions+=("$OPTARG");;
         P)
             perplexity_lm="$OPTARG";;
         o)
@@ -86,9 +89,13 @@ if [ ! -d "$data" ]; then
     echo -e "'$data' is not a directory! set -d appropriately!"
     exit 1
 fi
+if (( ${#partitions[@]} == 0 )); then
+    echo -e "No partitions of '$data' have been provided! set -p appropriately!"
+    exit 1
+fi
 for part in "${partitions[@]}"; do
     if [ ! -d "$data/$part" ]; then
-        echo -e "'$part' does not exist as a subdirectory of '$data'! set -d or 'partitions' appropriately!"
+        echo -e "'$part' does not exist as a subdirectory of '$data'! set -d or -p appropriately!"
         exit 1
     fi
 done
@@ -146,7 +153,7 @@ function split_text() {
         filename = $NF;
         NF --;
         gsub(/ /, "_");
-        gsub(/\[fp\]|d[zʒ]ː|tʃː|d[zʒ]|tʃ|\Sː|\S/, "& ");
+        gsub(/\[fp\]|d[zʒ]ː|t[sʃ]ː|d[zʒ]|t[sʃ]|\Sː|\S/, "& ");
         gsub(/ +/, " ");
         print $0 filename;
     }' "$file" > "$file"_
@@ -179,7 +186,9 @@ for part in "${partitions[@]}"; do
 
     if ! [ -f "$out_dir/$noise_wavs_out_dir/$part/trn_lstm" ]; then
         cp "$data/$part/trn" "$out_dir/$noise_wavs_out_dir/$part/trn"
+        # for use with word level transcriptions
         split_text "$out_dir/$noise_wavs_out_dir/$part/trn"
+
         mv "$out_dir/$noise_wavs_out_dir/$part/trn"{,_lstm}
     fi
 
@@ -195,8 +204,6 @@ for part in "${partitions[@]}"; do
 
         spart_trn="$out_dir/$trns_out_dir/$part/snr$snr.trn"
         if [ ! -f "$spart_trn" ]; then
-            echo "$decode_script_opts"
-            echo "$spart"
             . "$decode_script" $decode_script_opts "$spart" > "$spart_trn"
         fi
         

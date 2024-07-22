@@ -39,7 +39,7 @@ function split_text() {
         filename = $NF;
         NF --;
         gsub(/ /, "_");
-        gsub(/\[fp\]|d[zʒ]ː|tʃː|d[zʒ]|tʃ|\Sː|\S/, "& ");
+        gsub(/\[fp\]|d[zʒ]ː|t[sʃ]ː|d[zʒ]|t[sʃ]|\Sː|\S/, "& ");
         gsub(/ +/, " ");
         print $0 filename;
     }' "$file" > "$file"_
