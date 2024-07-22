@@ -1,6 +1,3 @@
-mkdir -p "data/boothroyd/test_trns"
-spart_trn="data/boothroyd/test_trns/snr$snr.trn"
-
 awk -v snr="$snr" \
 '
 BEGIN {

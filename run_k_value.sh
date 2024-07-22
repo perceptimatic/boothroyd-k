@@ -16,6 +16,7 @@ partitions=(train)          # partitions to perform
 out_dir=data/boothroyd
 norm_wavs_out_dir=norm
 noise_wavs_out_dir=noise
+trns_out_dir=trns
 snr_low=-10
 snr_high=30
 lm_ord=0
@@ -33,11 +34,12 @@ Options
     -n DIR      The output subdirectory for the normalized wav files (default: '$out_dir/$norm_wavs_out_dir')
     -N DIR      The output subdirectory for the normalized wav files
                 with added noise (default: '$out_dir/$noise_wavs_out_dir')
+    -t DIR      The output subdirectory for the decoded hypothesis trn files (default: '$out_dir/$trns_out_dir')
     -L INT      The lower bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_low')
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
     -l NAT      n-gram LM order. 0 is greedy; 1 is prefix with no LM (default: $lm_ord)"
 
-while getopts "hDS:d:P:o:n:N:L:H:l:" name; do
+while getopts "hDS:d:P:o:n:N:t:L:H:l:" name; do
     case $name in
         h)
             echo "$usage"
@@ -58,6 +60,8 @@ while getopts "hDS:d:P:o:n:N:L:H:l:" name; do
             norm_wavs_out_dir="$OPTARG";;
         N)
             noise_wavs_out_dir="$OPTARG";;
+        t)
+            trns_out_dir="$OPTARG";;
         L)
             snr_low="$OPTARG";;
         H)
@@ -70,12 +74,6 @@ while getopts "hDS:d:P:o:n:N:L:H:l:" name; do
     esac
 done
 shift $(($OPTIND - 1))
-if $pointwise; then
-  if ! [[ "$point_snr" =~ ^-?[0-9]+\.?[0-9]*$ ]] 2> /dev/null; then
-      echo -e "$point_snr is not a real number! set -s appropriately, or add a leading zero!"
-      exit 1
-  fi
-fi
 if [ -z "$decode_script_w_opts" ]; then
     echo -e "'$decode_script_w_opts' has not been assigned! set -S appropriately!"
     exit 1
@@ -109,6 +107,10 @@ if ! mkdir -p "$out_dir/$norm_wavs_out_dir" 2> /dev/null; then
 fi
 if ! mkdir -p "$out_dir/$noise_wavs_out_dir" 2> /dev/null; then
     echo -e "Could not create '$out_dir/$noise_wavs_out_dir'! set -N appropriately!"
+    exit 1
+fi
+if ! mkdir -p "$out_dir/$trns_out_dir" 2> /dev/null; then
+    echo -e "Could not create '$out_dir/$trns_out_dir'! set -t appropriately!"
     exit 1
 fi
 if ! [[ "$snr_low" =~ ^-?[0-9]+\.?[0-9]*$ ]] 2> /dev/null; then
@@ -155,6 +157,7 @@ for part in "${partitions[@]}"; do
     # Data prep -------------------------------------------------
     mkdir -p "$out_dir/$norm_wavs_out_dir/$part"
     mkdir -p "$out_dir/$noise_wavs_out_dir/$part"
+    mkdir -p "$out_dir/$trns_wavs_out_dir/$part"
 
     if ! [ -f "$out_dir/$norm_wavs_out_dir/$part/.done" ]; then
         # Normalize data volume to same reference average RMS
@@ -193,10 +196,9 @@ for part in "${partitions[@]}"; do
         ### decoding script must set a variable called spart_trn 
         ### containing the hyp decodings for this spart (snr level + partition)
         ### which is passed as the second argument to section_data.sh
-        ### if you do not provide a language model for the perplexity calculation
-        ### you should set lm to be the path to a language model in the decoding script
 
-        . "$decode_script_w_opts"
+        spart_trn="$out_dir/$trns_wavs_out_dir/$part/snr$snr.trn"
+        . "$decode_script_w_opts" > "$spart_trn"
         #########################
         
         if $delete_wavs; then
@@ -205,11 +207,7 @@ for part in "${partitions[@]}"; do
         fi
 
         # k calculation -------------------------------------------------
-        # make sure to set lm above when decoding at some point for -l >= 2
         if [ ! -f "$perplexity_lm" ]; then
-
-            #### what to do if train doesnt exist or want to use a differently named set as train
-
             echo "Training a $lm_ord-gram language model on the train set..."
             python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_lstm")" > "${lm_ord}gram.arpa_"
             mv "${lm_ord}gram.arpa"{_,}
