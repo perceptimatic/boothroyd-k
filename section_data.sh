@@ -27,25 +27,6 @@ fi
 
 set -eo pipefail
 
-function split_text() {
-    file="$1"
-    awk \
-    'BEGIN {
-        FS = " ";
-        OFS = " ";
-    }
-
-    {
-        filename = $NF;
-        NF --;
-        gsub(/ /, "_");
-        gsub(/\[fp\]|d[zʒ]ː|t[sʃ]ː|d[zʒ]|t[sʃ]|\Sː|\S/, "& ");
-        gsub(/ +/, " ");
-        print $0 filename;
-    }' "$file" > "$file"_
-    mv "$file"{_,}
-}
-
 for i in $(seq 1 $ns); do
     mkdir -p "$out_dir/$i"
 done
@@ -88,10 +69,6 @@ NR != FNR {
         }
     }
 }' "-" "$hyp_trn"
-
-for file in "$out_dir"/*/hyp.trn; do
-    split_text "$file" 
-done
 
 for file in "$out_dir"/*/ref.trn; do
     sort -nk 1,1 "$file" |

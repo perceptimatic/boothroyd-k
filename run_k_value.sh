@@ -141,25 +141,6 @@ if ! [ "$lm_ord" -ge 0 ] 2> /dev/null; then
     exit 1
 fi
 
-function split_text() {
-    file="$1"
-    awk \
-    'BEGIN {
-        FS = " ";
-        OFS = " ";
-    }
-
-    {
-        filename = $NF;
-        NF --;
-        gsub(/ /, "_");
-        gsub(/\[fp\]|d[zʒ]ː|t[sʃ]ː|d[zʒ]|t[sʃ]|\Sː|\S/, "& ");
-        gsub(/ +/, " ");
-        print $0 filename;
-    }' "$file" > "$file"_
-    mv "$file"{_,}
-}
-
 set -eo pipefail
 
 boothroyd="$(dirname "$0")"
@@ -184,12 +165,21 @@ for part in "${partitions[@]}"; do
         done
     fi
 
-    if ! [ -f "$out_dir/$noise_wavs_out_dir/$part/trn_lstm" ]; then
-        cp "$data/$part/trn" "$out_dir/$noise_wavs_out_dir/$part/trn"
-        # for use with word level transcriptions
-        split_text "$out_dir/$noise_wavs_out_dir/$part/trn"
+    if ! [ -f "$out_dir/$noise_wavs_out_dir/$part/trn_char" ]; then
+        awk \
+        'BEGIN {
+            FS = " ";
+            OFS = " ";
+        }
 
-        mv "$out_dir/$noise_wavs_out_dir/$part/trn"{,_lstm}
+        {
+            filename = $NF;
+            NF --;
+            gsub(/ /, "_");
+            gsub(/\S/, "& ");
+            gsub(/ +/, " ");
+            print $0 filename;
+        }' "$data/$part/trn" > "$out_dir/$noise_wavs_out_dir/$part/trn_char"
     fi
 
     for snr in $(seq $snr_low $snr_high); do
@@ -215,7 +205,7 @@ for part in "${partitions[@]}"; do
         # k calculation -------------------------------------------------
         if [ ! -f "$perplexity_lm" ]; then
             echo "Training a $lm_ord-gram language model on the train set..."
-            python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_lstm")" > "${lm_ord}gram.arpa_"
+            python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_char")" > "${lm_ord}gram.arpa_"
             mv "${lm_ord}gram.arpa"{_,}
             perplexity_lm="${lm_ord}gram.arpa"
         fi
@@ -223,7 +213,7 @@ for part in "${partitions[@]}"; do
         perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
 
         if [ ! -f "$perplexity_filename" ]; then
-        python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_lstm"
+        python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_char"
         fi
 
         if [ ! -f "$spart/.done_split" ]; then
