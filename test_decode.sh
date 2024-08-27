@@ -54,7 +54,7 @@ function prob(n) {
     print $0, filename
 }
 ' \
-"data/boothroyd/noise/train/trn_lstm" |
+"data/boothroyd/noise/train/trn_char" |
 awk \
 '{
     filename = $NF;
@@ -62,4 +62,4 @@ awk \
     gsub(/ /, "");
     gsub(/_/, " ");
     print $0, filename
-}' > "$spart_trn"
+}'
