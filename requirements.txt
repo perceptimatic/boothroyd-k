@@ -1,6 +1,7 @@
-numpy
+numpy==1.26.4
 jiwer
 scipy
 matplotlib
+typing
+typing_extensions
 kenlm
-git+https://github.com/sdrobert/pydrobert-pytorch.git
