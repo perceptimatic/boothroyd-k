@@ -70,6 +70,25 @@ NR != FNR {
     }
 }' "-" "$hyp_trn"
 
+for file in "$out_dir"/*/hyp.trn; do
+    sort -nk 1,1 "$file" |
+    awk \
+    'BEGIN {
+        FS = " ";
+        OFS = " ";
+    }
+
+    {
+        filename = $NF;
+        NF --;
+        gsub(/ /, "_");
+        gsub(/\S/, "& ");
+        gsub(/ +/, " ");
+        print $0 filename;
+    }' > "$file"_
+    mv "$file"{_,}
+done
+
 for file in "$out_dir"/*/ref.trn; do
     sort -nk 1,1 "$file" |
     awk 'BEGIN {FS = "\t"} {print $2}' > "$file"_
