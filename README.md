@@ -1,3 +1,9 @@
+# Installing
+## Pip
+``` bash
+pip install -r requirements.txt
+``` 
+
 # Data folder format
 The data folder should contain .wav files with corresponding .txt transcript files that have the same name.
 (For example, the transcript of the file utt01.wav should be called utt01.txt)
@@ -5,7 +11,7 @@ The .txt files in the data folder are expected to be word-level transcripts (i.e
 
 <details>
 <summary>Using phone or character level transcripts</summary>
-By default, run_k_value.sh takes in word-level transcripts and turns them into phone level transcripts with the function 'split_text'.
+By default, run_k_value.sh takes in word-level transcripts and turns them into character level transcripts with the function 'split_text'.
 Phone and character transcripts can be used by commenting out the call to split_text in the 'Data prep' section of run_k_value.sh. 
 <details>
 <summary>Phone level transcript details</summary>
