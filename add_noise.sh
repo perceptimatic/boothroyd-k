@@ -102,5 +102,5 @@ for file in "$data_dir"/*.wav; do
   vol_shift="$(bc -l <<< "$target_rms_amp / $trimmed_noise_rms_amp")"
   out_path="$out_dir/$partition/snr${snr}/$filename"
 
-  sox -m "$file" -v "$vol_shift" "$full_noise_file" -t wav "$out_path" trim 0 "$file_dur"
+  sox -r 16k -m "$file" -v "$vol_shift" "$full_noise_file" -t wav "$out_path" trim 0 "$file_dur"
 done
