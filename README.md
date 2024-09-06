@@ -39,12 +39,12 @@ If you need to save space, the '-D' flag deletes the .wav files that have had no
 
 Example call using a pre-made LM: 
 ``` bash
-run_k_value.sh -S test_decode.sh -d data/raw -P 5gram.arpa -O "-a 100" -p train -p test -p dev -D 
+bash run_k_value.sh -S test_decode.sh -d data/raw -P 5gram.arpa -O "-a 100" -p train -p test -p dev -D 
 ```
 
 Example call without a pre-made LM:
 ``` bash
-run_k_value.sh -S test_decode.sh -d data/raw -l 4 -O "-a 100" -p train -p test -p dev -D
+bash run_k_value.sh -S test_decode.sh -d data/raw -l 4 -O "-a 100" -p train -p test -p dev -D
 ```
 
 # Results
