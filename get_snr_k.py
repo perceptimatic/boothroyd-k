@@ -24,6 +24,7 @@ from typing import (
     Union,
 )
 from multiprocessing import Pool
+import warnings
 
 import numpy as np
 import jiwer
