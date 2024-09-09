@@ -5,12 +5,11 @@
 
 echo "$0 $*"
 
-usage="Usage: $0 [-h] [-n TYPE] [-d DIR] [-s REAL] [-o DIR] [-p DIR]"
+usage="Usage: $0 [-h] [-n TYPE] [-d DIR] [-s REAL] [-o DIR]"
 noise_type=whitenoise
 data_dir=
 snr=
 out_dir=
-partition=
 help="Adds generated noise to .wav files
 
 Options
@@ -19,10 +18,9 @@ Options
                 command (default: '$noise_type')
     -d DIR      The data directory (default: '$data_dir')
     -s REAL     The signal to noise ratio in dB (default: '$snr')
-    -o DIR      The output directory (default: '$out_dir')
-    -p DIR      The partition subdirectory (default: '$out_dir/$partition')"
+    -o DIR      The output directory (default: '$out_dir')"
 
-while getopts "hn:d:s:o:p:" name; do
+while getopts "hn:d:s:o:" name; do
     case $name in
         h)
             echo "$usage"
@@ -37,8 +35,6 @@ while getopts "hn:d:s:o:p:" name; do
             snr="$OPTARG";;
         o)
             out_dir="$OPTARG";;
-        p)
-            partition="$OPTARG";;
         *)
             echo -e "$usage"
             exit 1;;
@@ -53,10 +49,6 @@ if ! mkdir -p "$out_dir" 2> /dev/null; then
     echo -e "Could not create '$out_dir'! set -o appropriately!"
     exit 1
 fi
-if ! mkdir -p "$out_dir/$partition" 2> /dev/null; then
-    echo -e "Could not create '$$out_dir/$partition'! set -p appropriately!"
-    exit 1
-fi
 if ! [ "$(grep -Ew "sine|square|triangle|sawtooth|trapezium|exp|(|white|pink|brown)noise" <<< "$noise_type")" ] 2> /dev/null; then
     echo -e "$noise_type is not a valid noise type! set -n appropriately!"
     exit 1
@@ -69,7 +61,7 @@ fi
 set -eo pipefail
 
 mkdir -p "$out_dir/noise"
-mkdir -p "$out_dir/$partition/snr${snr}"
+mkdir -p "$out_dir/snr${snr}"
 
 max_dur=0
 
@@ -78,7 +70,7 @@ for file in "$data_dir"/*.wav; do
   max_dur="$(bc -l <<< "if ($file_dur > $max_dur) {$file_dur;} else {$max_dur;}")"
 done
 
-full_noise_file="$out_dir/noise/${noise_type}_${partition}_${max_dur}.wav"
+full_noise_file="$out_dir/noise/${noise_type}_${max_dur}.wav"
 
 # -R flag should keep this file the same, no matter how many times it's
 # called
@@ -92,7 +84,7 @@ for file in "$data_dir"/*.wav; do
   # calculates $file_rms_amp / ((10^($snr / 20)))
   target_rms_amp="$(bc -l <<< "$file_rms_amp / e(l(10) * ($snr / 20))")"
   vol_shift="$(bc -l <<< "$target_rms_amp / $trimmed_noise_rms_amp")"
-  out_path="$out_dir/$partition/snr${snr}/$filename"
+  out_path="$out_dir/snr${snr}/$filename"
 
   sox -r 16k -m "$file" -v "$vol_shift" "$full_noise_file" -t wav "$out_path" trim 0 "$file_dur"
 done
