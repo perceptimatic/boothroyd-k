@@ -1,15 +1,12 @@
 import kenlm
-import os
 import sys
-
-# for n gram character based language models use trn_lstm files
 
 lm_file_path = sys.argv[1]
 trn_file = sys.argv[2]
+out_path = sys.argv[3]
 
 model = kenlm.Model(lm_file_path)
 
-out_path = f"{os.path.dirname(trn_file)}/perplexity_{os.path.basename(lm_file_path)}"
 out = open(out_path, "w")
 
 with open(trn_file, "r") as f:

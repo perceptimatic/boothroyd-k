@@ -3,11 +3,13 @@
 # Copyright 2024 Sean Robertson, Michael Ong
 # Apache 2.0
 
+# Calculates the k value (as described by boothroyd) for the given datasets 
+
 export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
 usage="Usage: $0 [-h] [-D] [-S STR] [-O STR] [-d DIR] [-p DIR] [-P FILE]
-[-o DIR] [-n DIR] [-N DIR] [-t DIR] [-L INT] [-H INT] [-l NAT]"
+[-o DIR] [-n DIR] [-N DIR] [-t DIR] [-L INT] [-H INT] [-l NAT] [-x FILE]"
 delete_wavs=false
 decode_script=
 decode_script_opts=
@@ -21,6 +23,7 @@ trns_out_dir=trns
 snr_low=-10
 snr_high=30
 lm_ord=0
+perplexity_filepath=
 help="Determine the k value for a given model.
 The data directory should contain either wavs + a trn file,
 or wavs + corresponding txt files
@@ -40,9 +43,10 @@ Options
     -t DIR      The output subdirectory for the decoded hypothesis trn files (default: '$out_dir/$trns_out_dir')
     -L INT      The lower bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_low')
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
-    -l NAT      n-gram LM order (default: $lm_ord)"
+    -l NAT      n-gram LM order (default: '$lm_ord')
+    -x FILE     The path to the perplexity file (default: '$perplexity_filepath')"
 
-while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:" name; do
+while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:x:" name; do
     case $name in
         h)
             echo "$usage"
@@ -75,6 +79,8 @@ while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:" name; do
             snr_high="$OPTARG";;
         l)
             lm_ord="$OPTARG";;
+        x)
+            perplexity_filepath="$OPTARG";;
         *)
             echo -e "$usage"
             exit 1;;
@@ -99,15 +105,6 @@ for part in "${partitions[@]}"; do
         exit 1
     fi
 done
-if [ ! -f "$perplexity_lm" ]; then
-    if [ ! $lm_ord -ge 2 ]; then
-      echo -e "'$perplexity_lm' is not a file! set -P appropriately!"
-      echo -e "If you want to train an n-gram language model and use it for the perplexity calculation, set -l to be greater than 1."
-      exit 1
-    fi
-    echo -e "'$perplexity_lm' is not a file, but -l is greater than 1,"
-    echo -e "so the perplexity calculation will train an n-gram language model and use it."
-fi
 if ! mkdir -p "$out_dir" 2> /dev/null; then
     echo -e "Could not create '$out_dir'! set -o appropriately!"
     exit 1
@@ -139,6 +136,23 @@ fi
 if ! [ "$lm_ord" -ge 0 ] 2> /dev/null; then
     echo -e "$lm_ord is not a non-negative int! set -l appropriately!"
     exit 1
+fi
+if [ -z "$perplexity_filepath" ]; then
+    echo -e "-x has not been set, so the perplexity will be calculated for each partition"
+    echo -e "and the results will be placed in the following location(s):"
+    for part in "${partitions[@]}"; do
+        echo -e "$out_dir/$noise_wavs_out_dir/$part/"
+    done
+elif [ ! -f "$perplexity_filepath" ]; then
+    echo -e "'$perplexity_filepath' is not a file, so the perplexity will be calculated and the result will be placed in this location"
+    if [ ! -f "$perplexity_lm" ]; then
+        if [ ! $lm_ord -ge 2 ]; then
+        echo -e "'$perplexity_lm' is not a file! set -P appropriately!"
+        echo -e "If you want to train an n-gram language model and use it for the perplexity calculation, set -l to be greater than 1."
+        exit 1
+        fi
+        echo -e "'$perplexity_lm' is not a file, but -l is greater than 1, so the perplexity calculation will train an n-gram language model and use it."
+    fi
 fi
 
 set -eo pipefail
@@ -186,7 +200,7 @@ for part in "${partitions[@]}"; do
         spart="$out_dir/$noise_wavs_out_dir/$part/snr${snr}"
         if ! [[ -f "$spart/.done_noise" || -f "$spart/.done_split" ]]; then
             bash "$boothroyd"/add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
-            -o "$out_dir/$noise_wavs_out_dir" -p "$part"
+            -o "$out_dir/$noise_wavs_out_dir/$part"
             touch "$spart/.done_noise"
         fi
 
@@ -203,24 +217,26 @@ for part in "${partitions[@]}"; do
         fi
         
         # k calculation -------------------------------------------------
-        if [ ! -f "$perplexity_lm" ]; then
+        if [ ! -f "$perplexity_lm" ] && [ ! -f "$perplexity_filepath" ]; then
             echo "Training a $lm_ord-gram language model on the train set..."
             python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_char")" > "${lm_ord}gram.arpa_"
             mv "${lm_ord}gram.arpa"{_,}
             perplexity_lm="${lm_ord}gram.arpa"
         fi
 
-        perplexity_filename="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
-
-        if [ ! -f "$perplexity_filename" ]; then
-        python3 "$boothroyd"/get_perplexity.py "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_char"
+        if [ ! -f "$perplexity_filepath" ]; then
+            if [ -z "$perplexity_filepath" ]; then
+                perplexity_filepath="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
+            fi
+            python3 "$boothroyd"/get_perplexity.py \
+            "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_char" "$perplexity_filepath"
         fi
 
         if [ ! -f "$spart/.done_split" ]; then
             bash "$boothroyd"/section_data.sh \
-            "$perplexity_filename" \
+            "$perplexity_filepath" \
             "$spart_trn" 3 "$spart"
-            echo -e "split using: $perplexity_filename" > "$spart/.done_split"
+            echo -e "split using: $perplexity_filepath" > "$spart/.done_split"
         fi
     done
 
