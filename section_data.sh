@@ -1,5 +1,8 @@
 #! /usr/bin/env bash
 
+# Copyright 2024 Michael Ong
+# Apache 2.0
+
 if [ $# -ne 4 ]; then
     echo "Usage: $0 perp_file hypothesis_trn_file num-to-split out-dir"
     exit 1
@@ -20,6 +23,11 @@ if [ ! -f "$hyp_trn" ]; then
     exit 1
 fi
 
+if ! [ "$ns" -ge 0 ] 2> /dev/null; then
+    echo -e "'$ns' is not a non-negative int"
+    exit 1
+fi
+
 if [ ! -d "$out_dir" ]; then
     echo "'$out_dir' is not a directory"
     exit 1
@@ -31,9 +39,10 @@ for i in $(seq 1 $ns); do
     mkdir -p "$out_dir/$i"
 done
 
-awk '{print $0"\t"NR}' "$perp_file" |
+grep -F "$(awk '{print $NF}' "$hyp_trn")" "$perp_file" |
+awk '{print $0"\t"NR}' |
 sort -n -k 1,1 |
-awk -v ns="$ns" -v lines="$(wc -l < "$perp_file")" -v filename="$(basename "$perp_file")" -v out_dir="$out_dir" \
+awk -v ns="$ns" -v lines="$(wc -l < "$hyp_trn")" -v filename="$(basename "$perp_file")" -v out_dir="$out_dir" \
 'BEGIN {
     FS = "\t";
     OFS = " ";
