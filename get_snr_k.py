@@ -14,6 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Obtains the k value for the following comparisons: hp / zp, lp / zp (default: hp = 1, lp = 2, zp = 3)
+# in the given data directory (no default) using the curve of best fit f(x) = x^k, then
+# writes the results to a file (default: {data_dir}/results)
+# If specified (default: false), also creates graphs of the data points with the curve of best fit overlaid 
+# (default: {data_dir}/hp_zp_graph.png, {data_dir}/lp_zp_graph.png, {data_dir}/overlay_graph.png)
+# By default, the data points for lp / zp are blue circles with a red curve of best fit,
+# and the data points for hp / zp are blue crosses with a green curve of best fit
+# By default, the overlay graph also uses the same format for the data points and curves of best fit
+# (i.e. the green and red curves are the curves of best fit for hp / zp and lp / zp, respectively,
+# and the data points are also in the same format as in their original graphs)
+
+# The given data directory must be formatted in the same way as the output of section_data.sh
+
+# e.g. python get_snr_k.py --generate-images \
+#                       --hp 1 --lp 4 --zp 7 \
+#                       --results-path data/boothroyd/results/results \
+#                       --lp-zp-path data/boothroyd/results/lp_zp_graph \
+#                       --hp-zp-path data/boothroyd/results/hp_zp_graph \
+#                       --overlay-path data/boothroyd/results/overlay_graph \
+#                       data/boothroyd/noise/train 
+# would look for subdirectories in data/boothroyd/noise/train 
+# named "1", "4", and "7" for hp, lp, and zp, respectively
+# and would write the graphs and the results into the directory data/boothroyd/results
+
 import os
 import sys
 from typing import (
@@ -25,6 +49,8 @@ from typing import (
 )
 from multiprocessing import Pool
 import warnings
+import argparse
+import pathlib
 
 import numpy as np
 import jiwer
@@ -206,59 +232,113 @@ def get_err(ref_file, hyp_file):
     er = jiwer.wer(refs, hyps)
     return(er)
 
-data_dir = sys.argv[1]
-zp_errs = []
-lp_errs = []
-hp_errs = []
+def main(args=None):
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--generate-images", help="Whether to generate graphs of the k-value curves", action='store_true'
+    )
+    parser.add_argument(
+        "--hp", type=str, metavar="DIR", help="The name of the 'high predictability' bin", default="1"
+    )
+    parser.add_argument(
+        "--lp", type=str, metavar="DIR", help="The name of the 'low predictability' bin", default="2"
+    )
+    parser.add_argument(
+        "--zp", type=str, metavar="DIR", help="The name of the 'zero predictability' bin", default="3"
+    )
+    parser.add_argument(
+        "--results-path", type=pathlib.Path, metavar="FILE", help="The path to the results file", default=None
+    )
+    parser.add_argument(
+        "--lp-zp-path", type=pathlib.Path, metavar="FILE", help="The path to the lp / zp graph", default=None
+    )
+    parser.add_argument(
+        "--hp-zp-path", type=pathlib.Path, metavar="FILE", help="The path to the hp / zp graph", default=None
+    )
+    parser.add_argument(
+        "--overlay-path", type=pathlib.Path, metavar="FILE", help="The path to the hp / zp + lp / zp graph", default=None
+    )
+    parser.add_argument(
+        "data_dir", type=pathlib.Path, help="The data directory"
+    )
+    options = parser.parse_args(args)
 
-out_path = os.path.join(data_dir, "results")
-lp_image = os.path.join(data_dir, "lp_zp_graph.png")
-hp_image = os.path.join(data_dir, "hp_zp_graph.png")
-both_image = os.path.join(data_dir, "overlay_graph.png")
-out = open(out_path, "w")
+    zp_errs = []
+    lp_errs = []
+    hp_errs = []
 
-for snr_dir in os.scandir(data_dir):
+    if not options.results_path:
+        options.results_path = os.path.join(options.data_dir, "results")
+
+    for snr_dir in os.scandir(options.data_dir):
         if snr_dir.is_dir():
             for _, split_dirs, _ in os.walk(snr_dir):
                 for split_dir in split_dirs:
                     ref_file = os.path.join(snr_dir, split_dir, "ref.trn")
                     hyp_file = os.path.join(snr_dir, split_dir, "hyp.trn")
-                    if split_dir == "3":
+                    split_dir = split_dir.strip()
+                    if split_dir == options.zp:
                         zp_errs.append(get_err(ref_file,hyp_file))
-                    elif split_dir == "2":
+                    elif split_dir == options.lp:
                         lp_errs.append(get_err(ref_file,hyp_file))
-                    elif split_dir == "1":
+                    elif split_dir == options.hp:
                         hp_errs.append(get_err(ref_file,hyp_file))
 
-lz_k = curve_fit(boothroyd_func, xdata= zp_errs, ydata= lp_errs)[0][0]
-hz_k = curve_fit(boothroyd_func, xdata= zp_errs, ydata= hp_errs)[0][0]
+    if not zp_errs:
+        print(f"'{options.zp}' is not one of the bins in {options.data_dir}! set --zp properly.")
+        return 1
+    elif not lp_errs:
+        print(f"'{options.lp}' is not one of the bins in {options.data_dir}! set --lp properly.")
+        return 1
+    elif not hp_errs:
+        print(f"'{options.hp}' is not one of the bins in {options.data_dir}! set --hp properly.")
+        return 1
 
-out.write(f"LP/ZP k value:\t{lz_k}\n")
-out.write(f"HP/ZP k value:\t{hz_k}\n")
-out.close
+    lz_k = curve_fit(boothroyd_func, xdata=zp_errs, ydata=lp_errs)[0][0]
+    hz_k = curve_fit(boothroyd_func, xdata=zp_errs, ydata=hp_errs)[0][0]
 
-plt.figure(figsize = (10,8))
-plt.plot(zp_errs, lp_errs, 'bo')
-xseq = np.linspace(0, 1, num=100)
-plt.plot(xseq, xseq**lz_k, 'r')
-plt.xlabel('ZP error rate')
-plt.ylabel('LP error rate')
-plt.savefig(lp_image)
+    out = open(options.results_path, "w")
+    out.write(f"LP/ZP k value:\t{lz_k}\n")
+    out.write(f"HP/ZP k value:\t{hz_k}\n")
+    out.close
 
-plt.figure(figsize = (10,8))
-plt.plot(zp_errs, hp_errs, 'b+')
-xseq = np.linspace(0, 1, num=100)
-plt.plot(xseq, xseq**hz_k, 'g')
-plt.xlabel('ZP error rate')
-plt.ylabel('HP error rate')
-plt.savefig(hp_image)
+    if options.generate_images:
+        if not options.lp_zp_path:
+            options.lp_zp_path = os.path.join(options.data_dir, "lp_zp_graph.png")
+        if not options.hp_zp_path:
+            options.hp_zp_path = os.path.join(options.data_dir, "hp_zp_graph.png")
+        if not options.overlay_path:
+            options.overlay_path = os.path.join(options.data_dir, "overlay_graph.png")
+        
+        plt.figure(figsize = (10,8))
+        plt.plot(zp_errs, lp_errs, 'bo')
+        xseq = np.linspace(0, 1, num=100)
+        plt.plot(xseq, xseq**lz_k, 'r')
+        plt.xlabel('ZP error rate')
+        plt.ylabel('LP error rate')
+        plt.savefig(options.lp_zp_path)
 
-plt.figure(figsize = (20,16))
-plt.plot(zp_errs, lp_errs, 'bo')
-plt.plot(zp_errs, hp_errs, 'b+')
-xseq = np.linspace(0, 1, num=100)
-plt.plot(xseq, xseq**lz_k, 'r')
-plt.plot(xseq, xseq**hz_k, 'g')
-plt.xlabel('ZP error rate')
-plt.ylabel(' error rate')
-plt.savefig(both_image)
+        plt.figure(figsize = (10,8))
+        plt.plot(zp_errs, hp_errs, 'b+')
+        xseq = np.linspace(0, 1, num=100)
+        plt.plot(xseq, xseq**hz_k, 'g')
+        plt.xlabel('ZP error rate')
+        plt.ylabel('HP error rate')
+        plt.savefig(options.hp_zp_path)
+
+        plt.figure(figsize = (20,16))
+        plt.plot(zp_errs, lp_errs, 'bo')
+        plt.plot(zp_errs, hp_errs, 'b+')
+        xseq = np.linspace(0, 1, num=100)
+        plt.plot(xseq, xseq**lz_k, 'r')
+        plt.plot(xseq, xseq**hz_k, 'g')
+        plt.xlabel('ZP error rate')
+        plt.ylabel('error rate')
+        plt.savefig(options.overlay_path)
+
+    exit()
+
+if __name__ == "__main__":
+    sys.exit(main())

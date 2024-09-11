@@ -3,6 +3,15 @@
 # Copyright 2024 Sean Robertson, Michael Ong
 # Apache 2.0
 
+# Normalizes the volume of .wav files 
+# in the given partition (no default) of the given data directory (no default)
+# to a reference dB level (default: 70) above a reference ampliude (default: 10^-5)
+# then writes the results to a given output directory (no default)
+
+# e.g. bash normalize_data_volume.sh -p 0.001 -l 60 -d data/raw/train -o data/boothroyd/norm/train
+# would normalize the .wav files contained in data/raw/train to 60 dB above the reference amplitude of 0.001
+# then place the normalized .wav files in data/boothroyd/norm/train
+
 echo "$0 $*"
 
 usage="Usage: $0 [-h] [-p NINT] [-l NAT] [-b NAT] [-d DIR] [-o DIR]"

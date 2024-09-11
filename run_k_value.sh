@@ -9,13 +9,15 @@ export PYTHONUTF8=1
 [ -f "path.sh" ] && . "path.sh"
 
 usage="Usage: $0 [-h] [-D] [-S STR] [-O STR] [-d DIR] [-p DIR] [-P FILE]
-[-o DIR] [-n DIR] [-N DIR] [-t DIR] [-L INT] [-H INT] [-l NAT] [-x FILE]"
+[-o DIR] [-n DIR] [-N DIR] [-t DIR] [-L INT] [-H INT] [-l NAT] [-x FILE] [-k STR]"
 delete_wavs=false
 decode_script=
 decode_script_opts=
 data=
 partitions=()
 perplexity_lm=
+perplexity_filepath=
+k_opts=
 out_dir=data/boothroyd
 norm_wavs_out_dir=norm
 noise_wavs_out_dir=noise
@@ -23,7 +25,6 @@ trns_out_dir=trns
 snr_low=-10
 snr_high=30
 lm_ord=0
-perplexity_filepath=
 help="Determine the k value for a given model.
 The data directory should contain either wavs + a trn file,
 or wavs + corresponding txt files
@@ -35,7 +36,7 @@ Options
     -O STR      Options for the decoding script (default: '$decode_script_opts')
     -d DIR      The data directory (default: '$data_dir')
     -p DIR      The partition(s) of the data directory that the k value will be calculated for (default: '$partitions')
-    -P FILE     The language model used to calculate the perplexity (default: '$perplexity_lm')
+    -P FILE     The kenlm language model used to calculate the perplexity (default: '$perplexity_lm')
     -o DIR      The output directory (default: '$out_dir')
     -n DIR      The output subdirectory for the normalized wav files (default: '$out_dir/$norm_wavs_out_dir')
     -N DIR      The output subdirectory for the normalized wav files
@@ -44,9 +45,10 @@ Options
     -L INT      The lower bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_low')
     -H INT      The upper bound (inclusive) of signal-to-noise ratio (SNR) in dB (default: '$snr_high')
     -l NAT      n-gram LM order (default: '$lm_ord')
-    -x FILE     The path to the perplexity file (default: '$perplexity_filepath')"
+    -x FILE     The path to the perplexity file (default: '$perplexity_filepath')
+    -k STR      Options for the k calculation script (default: '$k_opts')"
 
-while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:x:" name; do
+while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:x:k:" name; do
     case $name in
         h)
             echo "$usage"
@@ -81,6 +83,8 @@ while getopts "hDS:O:d:p:P:o:n:N:t:L:H:l:x:" name; do
             lm_ord="$OPTARG";;
         x)
             perplexity_filepath="$OPTARG";;
+        k)
+            k_opts="$OPTARG";;
         *)
             echo -e "$usage"
             exit 1;;
@@ -157,8 +161,6 @@ fi
 
 set -eo pipefail
 
-boothroyd="$(dirname "$0")"
-
 for part in "${partitions[@]}"; do
     # Data prep -------------------------------------------------
     mkdir -p "$out_dir/$norm_wavs_out_dir/$part"
@@ -167,7 +169,7 @@ for part in "${partitions[@]}"; do
 
     if ! [ -f "$out_dir/$norm_wavs_out_dir/$part/.done" ]; then
         # Normalize data volume to same reference average RMS
-        bash "$boothroyd"/normalize_data_volume.sh -d "$data/$part" -o "$out_dir/$norm_wavs_out_dir/$part"
+        bash normalize_data_volume.sh -d "$data/$part" -o "$out_dir/$norm_wavs_out_dir/$part"
         touch "$out_dir/$norm_wavs_out_dir/$part/.done"
     fi
 
@@ -199,7 +201,7 @@ for part in "${partitions[@]}"; do
     for snr in $(seq $snr_low $snr_high); do
         spart="$out_dir/$noise_wavs_out_dir/$part/snr${snr}"
         if ! [[ -f "$spart/.done_noise" || -f "$spart/.done_split" ]]; then
-            bash "$boothroyd"/add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
+            bash add_noise.sh -d "$out_dir/$norm_wavs_out_dir/$part" -s "$snr" \
             -o "$out_dir/$noise_wavs_out_dir/$part"
             touch "$spart/.done_noise"
         fi
@@ -228,17 +230,17 @@ for part in "${partitions[@]}"; do
             if [ -z "$perplexity_filepath" ]; then
                 perplexity_filepath="$out_dir/$noise_wavs_out_dir/$part/perplexity_$(basename $perplexity_lm)"
             fi
-            python3 "$boothroyd"/get_perplexity.py \
+            python3 get_perplexity.py \
             "$perplexity_lm" "$out_dir/$noise_wavs_out_dir/$part/trn_char" "$perplexity_filepath"
         fi
 
         if [ ! -f "$spart/.done_split" ]; then
-            bash "$boothroyd"/section_data.sh \
+            bash section_data.sh \
             "$perplexity_filepath" \
             "$spart_trn" 3 "$spart"
             echo -e "split using: $perplexity_filepath" > "$spart/.done_split"
         fi
     done
 
-    python3 "$boothroyd"/get_snr_k.py "$out_dir/$noise_wavs_out_dir/$part"
+    python3 get_snr_k.py $k_opts "$out_dir/$noise_wavs_out_dir/$part"
 done

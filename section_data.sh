@@ -3,6 +3,36 @@
 # Copyright 2024 Michael Ong
 # Apache 2.0
 
+# Finds the utterances in the given perplexity file (no default) 
+# that correspond to the utterances in the given hypothesis trn file (no default),
+# then removes the utterances with the top and bottom 5% perplexities before
+# splitting the given files evenly by perplexity
+# into the given number of bins (no default)
+# and placeing the resulting hypothesis and reference trn files 
+# into subdirectories of the given output directory (no default)
+
+# The format of the hypothesis trn file is:
+# utterance (file_name)
+
+# the perplexity file has the following (tab-separated) format:
+# perplexity    utterance   (file_name)
+# (this is the format of the files that are created by the script get_perplexity.py)
+
+# e.g. bash section_data.sh \
+#           data/boothroyd/noise/train/perplexity_5gram.arpa \
+#           data/boothroyd/trns/train/snr-10.trn \
+#           3 \
+#           data/boothroyd/noise/train/snr-10
+# takes the perplexity file data/boothroyd/noise/train/perplexity_5gram.arpa 
+# and the hypothesis trn file data/boothroyd/trns/train/snr-10.trn, 
+# isolates the utterances with perplexities in the 5th to 95th percentile,
+# then splits the perplexity file and the hypothesis trn file into 3 ref.trn files and 3 hyp.trn files, respectively
+# before placing these files in data/boothroyd/noise/train/snr-10/{1,2,3}
+
+# bin N contains the utterances with perplexities
+# falling between the (5 + 90/(N-1))th percentile and the (5 + 90/N)th percentile
+
+
 if [ $# -ne 4 ]; then
     echo "Usage: $0 perp_file hypothesis_trn_file num-to-split out-dir"
     exit 1
@@ -34,6 +64,12 @@ if [ ! -d "$out_dir" ]; then
 fi
 
 set -eo pipefail
+
+if [ "$(wc -l <<< "$(grep -F "$(awk '{print $NF}' "$hyp_trn")" "$perp_file")")" -ne $(wc -l < "$hyp_trn") ]; then
+    echo -e "'$perp_file' is missing utterances correpsonding to the following utterances in '$hyp_trn':"
+    grep -vF "$(awk '{print $NF}' "$perp_file")" "$hyp_trn"
+    exit 1
+fi
 
 for i in $(seq 1 $ns); do
     mkdir -p "$out_dir/$i"

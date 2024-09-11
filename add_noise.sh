@@ -3,6 +3,17 @@
 # Copyright 2024 Sean Robertson, Michael Ong
 # Apache 2.0
 
+# Generates a given type of noise (default: whitenoise) with sox 
+# and places it a subdirectory of the given output directory (no default) called "noise", 
+# then mixes the noise with the .wav files in the given data directory (no default)
+# at the given SNR (in dB) (no default) and outputs the mixed .wav files 
+# into subdirectories of the output directory labelled with the given SNR
+
+# e.g. bash add_noise.sh -n pinknoise -d data/boothroyd/norm/train -s 10 -o data/boothroyd/noise/train
+# would create a pink noise file and place it in data/boothroyd/noise/train/noise
+# then mix the generated pink noise with the .wav files in data/boothroyd/norm/train with an SNR of 10 dB
+# and place the mixed .wav files in data/boothroyd/noise/train/snr10
+
 echo "$0 $*"
 
 usage="Usage: $0 [-h] [-n TYPE] [-d DIR] [-s REAL] [-o DIR]"

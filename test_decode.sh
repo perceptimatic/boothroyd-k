@@ -1,5 +1,7 @@
 OPTIND=1
 
+# toy dataset 'decoding' script (this script does not actually do any decoding)
+
 usage="Usage: $0 [-a INT]"
 alpha=0
 help="Test options
