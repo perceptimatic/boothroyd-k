@@ -14,6 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Obtains the estimated k value at a single point using the estimate k = ln(e_c) / ln(e_z)
+# where e_c is the error rate of the 'context' (non-zero predictability) bin 
+# and e_z is the error rate of the zero predictability bin
+# the output (k: [value]) is printed to stdout
+
+# e.g. python get_single_k.py hp_ref_trn hp_hyp_trn zp_ref_trn zp_hyp_trn
+# calculates e_c using hp_ref_trn as the reference file and hp_hyp_trn as the hypothesis file
+# and calculates e_z using zp_ref_trn as the reference file and zp_hyp_trn as the hypothesis file
+# then prints k: [ln(e_c) / ln(e_z)] to stdout
+
 import sys
 from typing import (
     List,
