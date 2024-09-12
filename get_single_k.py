@@ -176,7 +176,7 @@ def read_trn_iter(
             pool.close()
             pool.join()
 
-def get_ln_err(ref_file, hyp_file):
+def get_err(ref_file, hyp_file):
     ref_dict = dict(read_trn_iter(ref_file))
     empty_refs = set(key for key in ref_dict if not ref_dict[key])
     if empty_refs:
@@ -208,7 +208,7 @@ def get_ln_err(ref_file, hyp_file):
         return 1
     hyps = [" ".join(hyp_dict[x]) for x in keys]
     er = jiwer.wer(refs, hyps)
-    return(np.log(er))
+    return(er)
 
 
 def main(args=None):
@@ -230,10 +230,14 @@ def main(args=None):
     )
     options = parser.parse_args(args)
 
-    ap_ln_err = get_ln_err(options.ref_file, options.hyp_file)
-    zp_ln_err = get_ln_err(options.ref_zp_file, options.hyp_zp_file)
+    ap_err = get_err(options.ref_file, options.hyp_file)
+    zp_err = get_err(options.ref_zp_file, options.hyp_zp_file)
 
-    print("k: " + str(ap_ln_err / zp_ln_err))
+    if zp_err == 0:
+        print("k: inf")
+    else:
+        print("k: " + str(np.log(ap_err) / np.log(zp_err)))
+    print("ZP err: " + str(zp_err))
 
     exit()
 
