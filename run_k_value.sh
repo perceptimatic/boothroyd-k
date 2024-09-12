@@ -147,7 +147,8 @@ if [ -z "$perplexity_filepath" ]; then
     for part in "${partitions[@]}"; do
         echo -e "$out_dir/$noise_wavs_out_dir/$part/"
     done
-elif [ ! -f "$perplexity_filepath" ]; then
+fi
+if [ ! -f "$perplexity_filepath" ]; then
     echo -e "'$perplexity_filepath' is not a file, so the perplexity will be calculated and the result will be placed in this location"
     if [ ! -f "$perplexity_lm" ]; then
         if [ ! $lm_ord -ge 2 ]; then
