@@ -1,3 +1,18 @@
+# Summary
+This repository contains scripts used to calculate the textual predictability value k as described in https://arxiv.org/abs/2407.16537.
+
+The primary script used for this purpose is run_k_value.sh, which does the following 4 steps:
+1. Normalizes the provided .wav files and adds noise at various SNRs
+2. Decodes the audio from step 1 using the user-provided decoding script
+3. Sorts the utterances into textual predictability bins using the perplexity of each utterance
+4. Calculates the k value for two pairs of bins
+
+The user must provide the decoding script that is used in step 2.
+For step 3, the user may provide a pre-made n-gram language model in order to calculate the perplexities, or a file containing the utterances and their perplexities. If these are not provided, then the script will prompt the user for the order of an n-gram model which it will construct from the data provided before using that model to calculate perplexities.
+
+The script get_k_estimate.sh can also be run to estimate the k value at a single SNR point.
+This script has the same options as run_k_value.sh, with the exception of -s (SNR), which replaces -L (SNR lower bound) and -H (SNR upper bound). 
+
 # Installing
 ## Pip
 ``` bash
