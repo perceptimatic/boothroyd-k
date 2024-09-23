@@ -65,9 +65,9 @@ fi
 
 set -eo pipefail
 
-if [ "$(wc -l <<< "$(grep -F "$(awk '{print $NF}' "$hyp_trn")" "$perp_file")")" -ne $(wc -l < "$hyp_trn") ]; then
+if [ "$(wc -l <<< "$(grep -Ff <(awk '{print $NF}' "$hyp_trn") "$perp_file")")" -ne "$(wc -l < "$hyp_trn")" ]; then
     echo -e "'$perp_file' is missing utterances correpsonding to the following utterances in '$hyp_trn':"
-    grep -vF "$(awk '{print $NF}' "$perp_file")" "$hyp_trn"
+    grep -vFf <<< "$(awk '{print $NF}' "$perp_file")" "$hyp_trn"
     exit 1
 fi
 
@@ -75,7 +75,7 @@ for i in $(seq 1 $ns); do
     mkdir -p "$out_dir/$i"
 done
 
-grep -F "$(awk '{print $NF}' "$hyp_trn")" "$perp_file" |
+grep -Ff <(awk '{print $NF}' "$hyp_trn") "$perp_file" |
 awk '{print $0"\t"NR}' |
 sort -n -k 1,1 |
 awk -v ns="$ns" -v lines="$(wc -l < "$hyp_trn")" -v filename="$(basename "$perp_file")" -v out_dir="$out_dir" \

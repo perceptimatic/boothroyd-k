@@ -222,7 +222,7 @@ for part in "${partitions[@]}"; do
         # k calculation -------------------------------------------------
         if [ ! -f "$perplexity_lm" ] && [ ! -f "$perplexity_filepath" ]; then
             echo "Training a $lm_ord-gram language model on the train set..."
-            python3 ngram_lm.py -o $lm_ord -t 0 1 <<< "$(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_char")" > "${lm_ord}gram.arpa_"
+            python3 ngram_lm.py -o $lm_ord -t 0 1 -f <(awk '{NF--; print $0}' "$out_dir/$noise_wavs_out_dir/train/trn_char") > "${lm_ord}gram.arpa_"
             mv "${lm_ord}gram.arpa"{_,}
             perplexity_lm="${lm_ord}gram.arpa"
         fi
